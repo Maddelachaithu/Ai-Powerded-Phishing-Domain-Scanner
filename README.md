@@ -84,9 +84,9 @@ domain-scanner/
 │   ├── src/
 │   │   ├── App.jsx
 │   │   └── components/
+│   ├── vercel.json       # Vercel deployment configuration
 │   └── package.json
-├── render.yaml
-├── vercel.json
+├── render.yaml           # Render deployment blueprint
 └── README.md
 ```
 
@@ -125,6 +125,9 @@ pytest -v
 ## Deployment
 
 Backend is deployed on Render, frontend on Vercel.
+
+> [!IMPORTANT]
+> **Vercel Project Root Configuration**: When deploying the frontend on Vercel, you **must** configure Vercel's **Root Directory** setting to `frontend` in your Vercel Project Settings (under **General** -> **Root Directory**). This ensures Vercel runs the build process inside the `frontend` subfolder and reads `frontend/vercel.json` rather than failing to deploy from the monorepo root.
 
 1. Deploy the backend first (Render, root directory `backend/`), leave
 `FRONTEND_URL` unset initially
