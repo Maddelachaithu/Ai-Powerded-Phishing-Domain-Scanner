@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: sentinel-domain-watch-api
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: FRONTEND_URL
+        sync: false
+      - key: CRTSH_TIMEOUT_SECONDS
+        value: "8"
