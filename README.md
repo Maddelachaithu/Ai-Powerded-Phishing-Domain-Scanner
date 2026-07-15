@@ -1,132 +1,184 @@
-# Sentinel Domain Watch 🛡️
+# Sentinel Domain Watch
 
-Sentinel Domain Watch is a professional-grade brand protection scanner that discovers and analyzes typosquatting, character substitution, transposition, and homoglyph domain mutations targeting a given brand. The tool performs real-time parallel DNS lookups, Certificate Transparency (CT) log analysis, and WHOIS registration audits to evaluate the phishing risk of candidate domains.
+A brand-protection tool that detects likely phishing / typosquat domains
+targeting a given brand — modeled on real threat-intelligence products like
+CloudSEK's XVigil, built entirely on free, public, no-auth-required data
+sources.
 
-**Safety Assurance:** This tool queries only public, legal metadata sources (DNS records, crt.sh, WHOIS servers). It **never** attempts to connect to, fetch contents from, or interact directly with the mutations, ensuring complete safety for security analysts.
+Live demo: <add your Vercel URL here>
+Backend API docs: <add your Render URL here>/docs
 
----
 
-## Technical Stack
-- **Backend:** Python, FastAPI, python-whois, requests, pytest
-- **Frontend:** React (Vite), pure CSS custom dark-themed security dashboard
+## What it does
 
----
+Give it a domain (e.g. examplebank.com) and it will:
 
-## Setup and Running Instructions
+* Generate ~100+ realistic typosquat variants using techniques real attackers
+use — character omission, duplication, adjacent-keyboard substitution,
+transposition, homoglyphs (o→0, i→1, etc.), hyphenation, TLD swaps,
+and suspicious prefixes (login-, secure-, verify-)
+* Check which variants are actually registered and live, using DNS
+resolution and Certificate Transparency logs (crt.sh) — no scanning or
+visiting of the flagged domains themselves
+* Pull registration metadata (date, registrar) via WHOIS for flagged domains
+* Score each flagged domain 0-100 using a transparent, auditable rule set,
+and label it LOW / MEDIUM / HIGH risk
+* Display everything in a live dashboard with sortable, filterable results
+and a full breakdown of why each domain was flagged
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
 
-### 1. Backend Setup
-1. Open a terminal and navigate to the backend directory:
-   ```bash
-   cd domain-scanner
-   ```
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv .venv
-   # Windows PowerShell
-   .venv\Scripts\Activate.ps1
-   # macOS/Linux
-   source .venv/bin/activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r backend/requirements.txt
-   ```
-4. Start the FastAPI server:
-   ```bash
-   # From the domain-scanner directory
-   .venv\Scripts\uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
-   ```
-   The backend API documentation will be available at `http://127.0.0.1:8000/docs`.
+## Screenshots
 
-### 2. Running Backend Tests
-Ensure that your virtual environment is active, then run:
-```bash
-python -m pytest
+*(add screenshots or a short screen recording here — the search flow, the
+results dashboard, and an expanded risk-reasons panel are the three most
+worth showing)*
+
+
+## Scoring methodology
+
+Every flagged domain starts at 0 points. Points are added per signal
+detected, capped at 100:
+
+| Signal | Points |
+| :--- | :---: |
+| Registered in last 30 days | `+35` |
+| Registered in last 90 days (not last 30) | `+20` |
+| Registered over 1 year ago | `-15` |
+| Suspicious prefix present (login-, secure-, etc.) | `+25` |
+| Homoglyph substitution used | `+20` |
+| Character-level substitution/transposition | `+15` |
+| TLD swap only, rest of name identical | `+5` |
+| DNS-live and certificate confirmed | `+15` |
+
+0–39 = LOW, 40–69 = MEDIUM, 70–100 = HIGH.
+
+If the certificate check fails (e.g. crt.sh is temporarily unavailable),
+that domain is marked with `confidence: reduced` rather than silently
+scored as safe — the dashboard surfaces this separately so results aren't
+mistaken for complete data.
+
+
+## Tech stack
+
+* **Backend:** Python, FastAPI, python-whois, thread-pooled DNS + crt.sh
+lookups with retry/backoff
+* **Frontend:** React (Vite), dark-themed dashboard UI
+* **Data sources:** DNS resolution, Certificate Transparency logs (crt.sh),
+WHOIS — all free and public, no API keys required
+* **Testing:** pytest, 25 unit tests covering the generator, scoring engine,
+and checker (with mocked network calls)
+
+
+## Project structure
+
+```
+domain-scanner/
+├── backend/
+│   ├── main.py           # FastAPI app, /api/scan endpoint
+│   ├── generator.py      # typosquat variant generation
+│   ├── checker.py        # DNS + crt.sh + whois verification
+│   ├── scoring.py        # risk scoring engine
+│   ├── requirements.txt
+│   └── tests/
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   └── components/
+│   └── package.json
+├── render.yaml
+├── vercel.json
+└── README.md
 ```
 
-### 3. Frontend Setup
-1. Open a new terminal and navigate to the frontend directory:
-   ```bash
-   cd domain-scanner/frontend
-   ```
-2. Install node dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the Vite React development server:
-   ```bash
-   npm run dev
-   ```
-   The application dashboard will be accessible at `http://localhost:5173`.
 
----
+## Running locally
 
-## Risk Scoring Methodology
+### Backend
 
-All candidate domains start with a risk score of `0` and points are added for positive indicators. The maximum total score is capped at `100`.
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
 
-| Signal / Condition | Risk Score Weight | Description |
-| :--- | :---: | :--- |
-| **Registered in last 30 days** | `+35` | `registered_date` is within 30 days of scan time |
-| **Registered in last 90 days** (but not last 30) | `+20` | `registered_date` is between 31 and 90 days of scan time |
-| **Registered over 1 year ago** | `-15` | Reduces risk. Older domains are likely defensive or unrelated registrations |
-| **Registered date unknown** | `+0` | Skips signal, does not reward or penalize |
-| **Suspicious prefix present** | `+25` | Domain label starts with: `login-`, `secure-`, `verify-`, `account-`, `support-`, `my-`, `id-` |
-| **Homoglyph substitution used** | `+20` | Domain was generated using homoglyph replacements (e.g. `o -> 0`, `a -> @`) |
-| **Character substitution/transposition** | `+15` | Generated via omission, duplication, adjacent-key, or transposition techniques |
-| **TLD swap only** | `+5` | rest of the label is identical, only TLD swapped. Often lower risk defensive registrations |
-| **Both DNS-live AND certificate confirmed** | `+15` | DNS resolves successfully and crt.sh CT log check finds a certificate |
-| **Certificate check returned "unknown"** | `0` | crt.sh query failed/timed out. Confidence is flagged as `"reduced"` in the UI |
+API available at `http://localhost:8000`, interactive docs at
+`http://localhost:8000/docs`.
 
-### Risk Level Mapping
-- **`0 - 39`**: LOW
-- **`40 - 69`**: MEDIUM
-- **`70 - 100`**: HIGH
+### Frontend
 
----
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Security Safeguards
-1. **No Outbound HTTP to Targets:** The backend does not send HTTP requests to flagged domains. It only resolves them using standard socket DNS and queries third-party databases (crt.sh).
-2. **Warn Before Access:** The frontend details view warns the user to avoid directly visiting flagged domains, preventing accidental downloads of malicious payloads or access to active phishing forms.
+Dashboard available at `http://localhost:5173`.
 
----
+### Tests
+
+```bash
+cd backend
+pytest -v
+```
+
 
 ## Deployment
 
-### Render Backend Deploy Steps
-1. Create a new Web Service on [Render](https://render.com/).
-2. Connect your Git repository.
-3. Configure the service settings:
-   - **Root Directory:** `backend`
-   - **Runtime:** `Python`
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Set the following **Environment Variables**:
-   - `FRONTEND_URL`: The URL of your deployed Vercel frontend (e.g., `https://sentinel-domain-watch.vercel.app`).
-   - `CRTSH_TIMEOUT_SECONDS`: `8` (can be tuned if Render's network conditions require longer/shorter timeout).
-5. Deploy the service.
+Backend is deployed on Render, frontend on Vercel.
 
-### Vercel Frontend Deploy Steps
-1. Create a new Project on [Vercel](https://vercel.com/).
-2. Connect your Git repository.
-3. Configure the build settings:
-   - **Root Directory:** `frontend`
-   - **Framework Preset:** `Vite` (automatically detected)
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `dist`
-4. Set the following **Environment Variable**:
-   - `VITE_API_URL`: The URL of your deployed Render backend (e.g., `https://sentinel-domain-watch-api.onrender.com`).
-5. Deploy the project.
+1. Deploy the backend first (Render, root directory `backend/`), leave
+`FRONTEND_URL` unset initially
+2. Deploy the frontend (Vercel, root directory `frontend/`), set
+`VITE_API_URL` to the Render backend's URL
+3. Return to Render and set `FRONTEND_URL` to the resulting Vercel URL,
+which triggers a redeploy with correct CORS config
 
-### Recommended Deployment Order
-To ensure the CORS configurations and environment variables connect correctly, follow this two-step dependency order:
-1. **Deploy the backend first:** Deploy to Render and copy the generated Render backend URL (e.g., `https://sentinel-domain-watch-api.onrender.com`).
-2. **Deploy the frontend:** Deploy to Vercel, adding `VITE_API_URL` set to the copied Render URL. Copy the generated Vercel frontend URL.
-3. **Link frontend to backend:** Go back to your Render dashboard for the backend service, add the `FRONTEND_URL` environment variable set to the Vercel frontend URL, and trigger a redeploy of the backend.
+Environment variables:
 
-> [!NOTE]
-> The crt.sh Certificate Transparency lookup is a third-party dependency outside of our control. It may occasionally experience latency, rate limits, or temporary outages in production, same as in local testing. When it times out, the tool reports "unknown" status with reduced confidence to prevent false negatives.
+| Variable | Where | Purpose |
+| :--- | :--- | :--- |
+| `FRONTEND_URL` | Render (backend) | Allowed CORS origin for the live frontend |
+| `CRTSH_TIMEOUT_SECONDS` | Render (backend) | Timeout for Certificate Transparency lookups (default: 8) |
+| `VITE_API_URL` | Vercel (frontend) | Backend API base URL |
+
+*Note: Render's free tier spins down after inactivity — the first request
+after idle time can take 30–60 seconds.*
+
+
+## Design principles
+
+* **Never interacts with flagged domains.** All checks are metadata-only
+(DNS, certificate logs, WHOIS). The tool never visits, fetches content
+from, or renders a flagged domain as a clickable link without a warning.
+* **Auditable scoring.** Every risk score comes with a plain-language
+breakdown of exactly which signals fired and how many points each
+contributed — no black-box scoring.
+* **Graceful degradation.** Third-party data sources (crt.sh, WHOIS) are
+outside this project's control and can be slow or temporarily unavailable.
+The system distinguishes "confirmed clean" from "couldn't verify" rather
+than defaulting to either extreme.
+
+
+## Known limitations
+
+* `crt.sh` availability can be inconsistent; results marked `confidence: reduced` reflect this rather than being treated as false negatives
+* WHOIS data format varies significantly by registrar and isn't always
+parseable — registration date is treated as optional evidence, not a
+required field
+* Currently checks a fixed set of typosquat generation techniques; doesn't
+yet cover combinatorial variants (e.g. homoglyph + hyphenation together)
+
+
+## Roadmap
+
+- [ ] Combinatorial variant generation (stacking multiple techniques)
+- [ ] Scheduled re-scans with historical trend tracking
+- [ ] Export results as CSV/PDF report
+- [ ] Slack/email alerting for newly-flagged high-risk domains
+
+
+## Why this project
+
+Built as a hands-on exploration of brand/domain threat monitoring, modeled
+on how tools like CloudSEK's XVigil approach typosquat and phishing domain
+detection — using only public, legal data sources throughout.
